@@ -22,7 +22,9 @@ GENERAL WORDPRESS PLUGIN DEVELOPMENT GUIDELINES
 * Provide a direct link to the plugin's settings or status page on the Plugins listing page.
 * Increment plugin version numbers with each release.
 * Include changelogs in both the PHP file and README file for clarity.
-* Double-check all code and documentation before final output.  INITIAL PLUGIN (Early 1.x series) DEVELOPMENT 
+* Double-check all code and documentation before final output.  
+
+SPECIFICALLY FOR INITIAL PLUGIN (Early 1.x series) DEVELOPMENT 
 * Keep PHP, HTML, JS, and CSS inline within a single PHP file unless absolutely necessary.
 * Do not combine into single file or split up into multiple files unless explicitly requested by the user.
 * If files are requested to be split up into multiple files please make sure to add the proper references to call them in the main plugin file
