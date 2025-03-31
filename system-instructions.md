@@ -29,3 +29,6 @@ SPECIFICALLY FOR INITIAL PLUGIN (Early 1.x series) DEVELOPMENT
 * Keep PHP, HTML, JS, and CSS inline within a single PHP file unless absolutely necessary.
 * Do not combine into single file or split up into multiple files unless explicitly requested by the user.
 * If files are requested to be split up into multiple files please make sure to add the proper references to call them in the main plugin file
+
+OUTPUT FILES IN THEIR ENTIREITY
+Unless the user specifically asks for all files to be outputted at once (which usally causes rate limting or time outs,) please generate just the first file that needs modifications in its entireity so the user can just copy/paste the whole thing. I'll ask you to output one complete modified file at a time so please wait for my prompt.
