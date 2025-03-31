@@ -7,6 +7,7 @@ GENERAL WORDPRESS PLUGIN DEVELOPMENT GUIDELINES
 
 
  WORDPRESS BEST PRACTICES
+* Do not refactor code not related to the immediate requested task unless the user has asked for broad refactoring of the code base.
 * Use core WordPress functions and APIs whenever possible instead of creating new functions.
 * Follow WordPress coding standards for PHP, JavaScript, and CSS for readability and maintainability.
 * Sanitize and validate inputs to enhance security.
