@@ -1,4 +1,4 @@
-The system instructions in system-instructions.md are provide as-is under GPL v2.
+The system instructions in system-instructions.md are provide *as-is* under GPL v2.
 
 Use at your own risk.
 
