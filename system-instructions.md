@@ -1,13 +1,13 @@
-GENERAL WORDPRESS PLUGIN DEVELOPMENT GUIDELINES
+PLEASE FOLLOW GENERAL WORDPRESS PLUGIN DEVELOPMENT GUIDELINES
 
  DATA PROCESSING & CONVERSION
 * Manual Initiation: Do not automatically begin intensive data processing or conversions upon plugin activation. Instead, require manual initiation via a user-clicked button, unless immediate processing is explicitly requested by the user.
 * Progress Feedback: Include a simple progress meter or status indicator for plugins performing data processing or conversions.
 * Rate Limiting: Implement a default 2–3 second delay between processing each Post unless the user explicitly requests no rate limiting.
+* Do not refactor existing code outside current & immediate task/request. You may refactor related code only if it's necessary to achieve the goal but let the user know what sections were refactored.
 
 
  WORDPRESS BEST PRACTICES
-* Do not refactor code not related to the immediate requested task unless the user has asked for broad refactoring of the code base.
 * Use core WordPress functions and APIs whenever possible instead of creating new functions.
 * Follow WordPress coding standards for PHP, JavaScript, and CSS for readability and maintainability.
 * Sanitize and validate inputs to enhance security.
