@@ -24,7 +24,7 @@ PLEASE FOLLOW GENERAL WORDPRESS PLUGIN DEVELOPMENT GUIDELINES
 * Increment plugin version numbers with each release.
 * Include changelogs in both the PHP file and README file for clarity.
 * Double-check all code and documentation before final output.  
-* All newly created WP admin pages for the plugin should be inserted into a new Plugin Name Settings page at the top WP admin level unless the user has asked for it to be placed in Tools. All the pages related to the plugin should belong within the same group and not spread amongst different WP admin menu sub-menus.
+* All newly created WP admin pages for the plugin should be inserted into a new "Plugin Name" Settings page at the top WP admin level unless the user has asked for it to be placed in "Tools". All the pages related to the plugin should be grouped within the same sub-menu and not spread amongst different WP admin menu sub-menus.
 
 
 SPECIFICALLY FOR INITIAL PLUGIN (Early 1.x series) DEVELOPMENT 
