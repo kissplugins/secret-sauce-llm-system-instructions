@@ -92,6 +92,58 @@ function get_user_display_name( $user_id ) {
 
 ---
 
+## 🔄 When to Transition to Finite State Machine (FSM)
+
+Recommend transitioning to a Finite State Machine when features exhibit these characteristics:
+
+### Signs You Need an FSM
+
+- [ ] **Multiple states** - Feature has 3+ distinct states (e.g., draft, pending, approved, published)
+- [ ] **Complex transitions** - State changes depend on multiple conditions or user roles
+- [ ] **State-dependent behavior** - Different actions are available in different states
+- [ ] **Validation rules** - Certain transitions are only valid from specific states
+- [ ] **Audit requirements** - Need to track state history and transition reasons
+- [ ] **Concurrent states** - Multiple state dimensions (e.g., approval status + payment status)
+- [ ] **Workflow complexity** - Business logic becomes difficult to track with simple flags/booleans
+
+### When to Recommend FSM to User
+
+**Recommend FSM if:**
+- Feature has grown beyond 2-3 boolean flags tracking status
+- You find yourself writing nested if/else statements to determine valid actions
+- State logic is duplicated across multiple files or functions
+- Debugging state-related issues becomes time-consuming
+- New state requirements keep being added to existing features
+- State transitions need to trigger specific actions (hooks, notifications, logging)
+
+### FSM Implementation Approach
+
+**Suggest to user:**
+1. **Define states clearly** - List all possible states the entity can be in
+2. **Map transitions** - Document which state changes are valid (state diagram)
+3. **Centralize state logic** - Create a dedicated class/file for state management
+4. **Use WordPress metadata** - Store current state in post_meta or options table
+5. **Add transition hooks** - Fire actions on state changes for extensibility
+6. **Log transitions** - Track who changed state, when, and why (audit trail)
+
+### Example FSM Scenarios
+
+- **Order processing**: pending → processing → completed → refunded
+- **Content workflow**: draft → review → approved → published → archived
+- **User onboarding**: registered → verified → profile_complete → active
+- **Support tickets**: open → assigned → in_progress → resolved → closed
+
+### Red Flags (Don't Use FSM)
+
+- Feature only has 2 states (use simple boolean)
+- States never transition (use static status field)
+- No validation rules for transitions (simple status update is sufficient)
+- Over-engineering a simple feature
+
+**When in doubt, ask the user**: "This feature is tracking [X] states with [Y] transitions. Would you like me to implement a Finite State Machine for better maintainability?"
+
+---
+
 ## ✅ Pre-Commit Checklist
 
 Before completing any task, verify:
@@ -114,7 +166,7 @@ Before completing any task, verify:
 
 ### Security Functions
 - **Input**: `sanitize_text_field()`, `sanitize_email()`, `sanitize_url()`, `absint()`, `wp_unslash()`
-- **Output**: `esc_html()`, `esc_attr()`, `esc_url()`, `esc_js()`, `wp_kses_post()`
+- **Output**: `esc_html()`, `esc_attr()`, `esc_url ()`, `esc_js()`, `wp_kses_post()`
 - **Nonces**: `wp_nonce_field()`, `wp_create_nonce()`, `check_admin_referer()`, `wp_verify_nonce()`
 - **Capabilities**: `current_user_can()`, `user_can()`
 - **Database**: `$wpdb->prepare()`, `$wpdb->get_results()`, `$wpdb->insert()`
