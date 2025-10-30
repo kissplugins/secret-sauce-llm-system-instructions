@@ -1,6 +1,6 @@
 # SMSPD Development Philosophy & Checklist
 
-**SMS** (text messaging) + **PD** (police department) = **SMSPD**
+Easy to remember Acroynmn **SMS** (text messaging) + **PD** (police department) = **SMSPD**
 
 A WordPress development checklist focusing on quality attributes that matter.
 
