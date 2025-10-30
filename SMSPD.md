@@ -1,5 +1,7 @@
 # SMSPD Development Philosophy
 
+**SMS** (text messaging) + **PD** (police department) = **SMSPD**
+
 A WordPress development checklist focusing on quality attributes that matter.
 
 ---
@@ -43,8 +45,34 @@ Reduce technical debt by doing things the right way from the start.
 - [ ] Technical debt is tracked and addressed regularly
 - [ ] No commented-out code blocks left in production
 - [ ] Consistent file and folder structure
+- [ ] Complex workflows modeled with FSM or FSM-like patterns when appropriate (e.g., order processing, approval workflows, multi-step forms)
+- [ ] State transitions are explicit and validated (not scattered across multiple conditionals)
+- [ ] Consider FSM patterns when you find yourself writing nested if/else for status checks or writing switch statements based on status fields
 
 **Ask yourself:** "Could another developer understand and modify this code in 6 months?"
+
+### When to Use FSM Patterns
+
+Finite State Machine (FSM) patterns shine when you have:
+- **Multiple states** with specific allowed transitions (draft → pending → approved → published)
+- **Complex conditionals** scattered across your codebase checking the same status field
+- **Workflows** where invalid state transitions should be prevented (can't go from "cancelled" to "shipped")
+
+**Example scenario:** An order processing system with states like `pending`, `processing`, `shipped`, `delivered`, `cancelled`. Instead of scattered if/else blocks checking order status, an FSM defines valid transitions and centralizes state change logic.
+
+```php
+// ❌ BAD - State logic scattered everywhere
+if ($order->status === 'pending') {
+    // Can change to processing or cancelled
+}
+if ($order->status === 'processing' && $some_condition) {
+    // Can change to shipped
+}
+
+// ✅ GOOD - FSM pattern centralizes state transitions
+$order_fsm->transition_to('processing'); // Only allows valid transitions
+$order_fsm->can_transition_to('cancelled'); // Returns true/false
+```
 
 ---
 
