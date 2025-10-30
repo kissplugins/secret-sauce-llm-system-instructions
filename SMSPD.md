@@ -1,4 +1,4 @@
-# SMSPD Development Philosophy
+# SMSPD Development Philosophy & Checklist
 
 **SMS** (text messaging) + **PD** (police department) = **SMSPD**
 
