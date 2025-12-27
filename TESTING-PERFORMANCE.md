@@ -60,3 +60,38 @@ So today the practical solution is to assemble a workflow: PHPStan/Psalm (plus c
 [23](https://www.psalm.dev)
 [24](https://snyk.io/articles/devsecops/)
 [25](https://mcpmarket.com/tools/skills/wordpress-remote-docker-manager)
+
+===
+
+Claude Opus 4.5 Analysis
+
+The core recommendation is correct—there's no turnkey solution, so you assemble PHPStan/Psalm plus runtime query inspection. But the analysis has some issues worth noting:
+
+**Source quality is mixed.** Several of those citations are GitHub security advisories (GHSA-*) that have nothing to do with query detection—looks like the search pulled in noise. The claude-wordpress-skills repo reference is legitimate and potentially useful, though.
+
+**The static analysis approach is undersold.** You don't need "emerging rule packs"—you can write targeted PHPStan rules fairly quickly. The patterns you care about are finite:
+
+```php
+// These are greppable without sophisticated analysis:
+'posts_per_page' => -1
+'numberposts' => -1
+'nopaging' => true
+->get_results( without LIMIT
+```
+
+A simple bash script in CI catches 80% of unbounded queries:
+
+```bash
+grep -rn "posts_per_page.*=>.*-1\|numberposts.*=>.*-1\|nopaging.*=>.*true" \
+  --include="*.php" src/ && exit 1
+```
+
+**The N+1 detection is harder than presented.** Static analysis genuinely struggles here because the pattern is contextual—`get_post_meta()` inside a loop isn't always N+1 if the meta was primed earlier. The runtime `SAVEQUERIES` approach is more reliable but requires representative test coverage to actually trigger the code paths.
+
+**What I'd actually do for your plugins:**
+
+1. Simple grep-based pre-commit hook for obvious unbounded patterns
+2. PHPStan baseline with WordPress stubs, add rules incrementally  
+3. A lightweight integration test that hits key endpoints and asserts `count($wpdb->queries) < N`
+
+The Perplexity answer points in the right direction but oversells the tooling maturity. For a plugin like your Hourly Monitor, manual code review with your SMSPD checklist is probably more effective than trying to automate this today.
