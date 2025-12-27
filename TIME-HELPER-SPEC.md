@@ -170,16 +170,30 @@ public static function get_day_range(?string $date = null): array {
 
 **Critical:** Uses `DateTimeImmutable::getTimestamp()` which returns **true UTC timestamps**, not the fake `current_time()` values. This is intentional—we want real timestamps for the boundaries of a local calendar day.
 
-#### `format_iso_utc(int $timestamp): string`
+#### `format_iso_utc(int $timestamp, bool $is_site_tz = true): string`
 Converts a timestamp to UTC ISO string for WooCommerce queries.
 
+**v1.1.14 Fix:** This method now properly handles the distinction between:
+1. **"Fake" site-TZ timestamps** from `current_time('timestamp')` - these are shifted by the site's UTC offset and need to be UN-shifted back to true UTC.
+2. **True UTC timestamps** from `DateTimeImmutable::getTimestamp()` - these are already in UTC and should be formatted directly.
+
 ```php
-public static function format_iso_utc(int $timestamp): string {
+public static function format_iso_utc(int $timestamp, bool $is_site_tz = true): string {
+    if ($is_site_tz) {
+        // Un-shift the "fake" site-TZ timestamp back to true UTC.
+        $offset    = (int) wp_date('Z', $timestamp);
+        $timestamp = $timestamp - $offset;
+    }
+
     return gmdate('Y-m-d H:i:s', $timestamp);
 }
 ```
 
 **Use for:** Building `date_created_gmt` query parameters.
+
+**Parameters:**
+- `$timestamp` - Unix timestamp
+- `$is_site_tz` - Set to `true` (default) for timestamps from `WHM_Date::now()` / `current_time('timestamp')`. Set to `false` for timestamps from `DateTimeImmutable::getTimestamp()`.
 
 #### `get_day_range_utc(?string $date = null): array`
 Returns day boundaries with both timestamps AND UTC ISO strings.
@@ -188,11 +202,13 @@ Returns day boundaries with both timestamps AND UTC ISO strings.
 public static function get_day_range_utc(?string $date = null): array {
     $local_range = self::get_day_range($date);
 
+    // Pass false: get_day_range() uses DateTimeImmutable::getTimestamp()
+    // which returns TRUE UTC timestamps, not "fake" site-TZ timestamps.
     return [
         'start'     => $local_range['start'],
         'end'       => $local_range['end'],
-        'start_iso' => self::format_iso_utc($local_range['start']),
-        'end_iso'   => self::format_iso_utc($local_range['end']),
+        'start_iso' => self::format_iso_utc($local_range['start'], false),
+        'end_iso'   => self::format_iso_utc($local_range['end'], false),
     ];
 }
 ```
@@ -281,25 +297,39 @@ class My_Query {
 
 ## 5. Testing Requirements
 
-### 5.1 Self-Test: UTC Conversion
+### 5.1 Self-Test: UTC Conversion (Non-Tautological)
+
+**v1.1.14 Fix:** The test now validates against TRUE UTC time, not the input timestamp.
+This catches the bug where `gmdate()` was applied to a site-TZ shifted timestamp without un-shifting it.
 
 ```php
 public static function test_utc_conversion(): array {
-    $site_now = Time_Helper::now();
-    $utc_now  = Time_Helper::now_utc();
+    $site_now = WHM_Date::now();     // "Fake" site-TZ timestamp
+    $utc_now  = WHM_Date::now_utc(); // True UTC timestamp
 
-    $utc_iso      = Time_Helper::format_iso_utc($site_now);
-    $expected_iso = gmdate('Y-m-d H:i:s', $site_now);
+    // Convert site-TZ timestamp to UTC ISO string.
+    $utc_iso = WHM_Date::format_iso_utc($site_now);
 
-    $passed = ($utc_iso === $expected_iso);
+    // The CORRECT expected output is the TRUE UTC time.
+    // If format_iso_utc() just did gmdate($site_now) without un-shifting,
+    // this test would FAIL.
+    $expected_iso = gmdate('Y-m-d H:i:s', $utc_now);
+
+    // Allow 2-second tolerance for execution time.
+    $utc_iso_ts      = strtotime($utc_iso . ' UTC');
+    $expected_iso_ts = strtotime($expected_iso . ' UTC');
+    $time_diff       = abs($utc_iso_ts - $expected_iso_ts);
+    $valid_utc       = ($time_diff <= 2);
 
     return [
-        'passed'  => $passed,
+        'passed'  => $valid_utc,
         'details' => [
             'site_tz_timestamp' => $site_now,
             'utc_timestamp'     => $utc_now,
+            'utc_iso_output'    => $utc_iso,
+            'expected_utc_iso'  => $expected_iso,
+            'time_diff_seconds' => $time_diff,
             'offset_hours'      => round(($site_now - $utc_now) / 3600, 2),
-            'utc_iso'           => $utc_iso,
         ],
     ];
 }
