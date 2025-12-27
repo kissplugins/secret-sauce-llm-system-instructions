@@ -1,8 +1,9 @@
 # Time Helper Module Specification
 
-**Version:** 1.0  
-**Status:** Reference Architecture  
-**Last Updated:** 2025-12-27  
+**Version:** 1.1
+**Status:** Reference Architecture
+**Last Updated:** 2025-12-27
+**Plugin Version:** 1.1.14
 **Context:** WordPress plugins with WooCommerce order reporting
 
 ---
@@ -93,15 +94,20 @@ If you use `current_time('timestamp')` to build query ranges and pass them to `w
 ```php
 class Time_Helper {
     // ─── INTERNAL PROCESSING (Site Timezone) ───────────────────────
-    public static function now(): int;
-    public static function now_utc(): int;
+    public static function now(): int;              // ⚠️ Returns FAKE site-shifted timestamp!
+    public static function now_utc(): int;           // Returns true Unix timestamp
     public static function today(): string;
     public static function get_day_range(?string $date = null): array;
     public static function get_hour(int $timestamp): int;
-    
+
     // ─── UTC CONVERSION (Query Layer) ──────────────────────────────
-    public static function format_iso_utc(int $timestamp): string;
+    // Current API (v1.1.14):
+    public static function format_iso_utc(int $timestamp, bool $is_site_tz = true): string;
     public static function get_day_range_utc(?string $date = null): array;
+
+    // Recommended future API (clearer, no boolean flag):
+    // public static function format_iso_utc(int $timestamp): string;           // TRUE UTC only
+    // public static function format_iso_utc_from_site(int $timestamp): string; // Site-shifted
     
     // ─── USER DISPLAY (Respects WP Settings) ───────────────────────
     public static function format(int $timestamp): string;
@@ -122,6 +128,12 @@ class Time_Helper {
 ### 3.2 Method Specifications
 
 #### `now(): int`
+
+> ⚠️ **CRITICAL WARNING:** This method does **NOT** return a real Unix timestamp!
+> The value returned is shifted by the site's UTC offset.
+> **NEVER** pass this value to `gmdate()`, external APIs, or database queries expecting true UTC.
+> Use `now_utc()` for true Unix timestamps, or `format_iso_utc_from_site()` to convert for WC queries.
+
 Returns the current timestamp in **site timezone context**.
 
 ```php
@@ -130,9 +142,9 @@ public static function now(): int {
 }
 ```
 
-**Use for:** Cron windows, "last 15 minutes" calculations, business logic.
+**Use for:** Cron windows, "last 15 minutes" calculations, business logic timing.
 
-**Warning:** This is NOT a true Unix timestamp. Do not pass directly to `gmdate()` or WC queries.
+**Future consideration:** Consider renaming to `now_site_shifted()` to make the behavior explicit and prevent developer confusion.
 
 #### `now_utc(): int`
 Returns the current **true UTC** timestamp.
@@ -194,6 +206,20 @@ public static function format_iso_utc(int $timestamp, bool $is_site_tz = true): 
 **Parameters:**
 - `$timestamp` - Unix timestamp
 - `$is_site_tz` - Set to `true` (default) for timestamps from `WHM_Date::now()` / `current_time('timestamp')`. Set to `false` for timestamps from `DateTimeImmutable::getTimestamp()`.
+
+**Edge Cases:**
+- `format_iso_utc(0)` returns `'1970-01-01 00:00:00'` (Unix epoch) adjusted by offset if `$is_site_tz=true`
+- Negative timestamps are technically valid but may produce unexpected dates; consider adding a guard clause in production code
+
+> ⚠️ **Recommended Refactor:** The boolean `$is_site_tz` parameter is a code smell—it means the method does two conceptually different things. Consider splitting into explicit methods:
+> ```php
+> // For "fake" site-TZ timestamps from now() / current_time('timestamp')
+> public static function format_iso_utc_from_site(int $timestamp): string;
+>
+> // For true UTC timestamps from DateTimeImmutable::getTimestamp()
+> public static function format_iso_utc(int $timestamp): string;
+> ```
+> Explicit method names prevent the "which boolean do I pass?" problem and make call sites self-documenting.
 
 #### `get_day_range_utc(?string $date = null): array`
 Returns day boundaries with both timestamps AND UTC ISO strings.
@@ -335,14 +361,25 @@ public static function test_utc_conversion(): array {
 }
 ```
 
-### 5.2 Self-Test: Day Range Consistency
+### 5.2 Self-Test: Day Range Consistency (DST-Aware)
 
 ```php
 public static function test_day_range(): array {
     $range = Time_Helper::get_day_range();
+    $span  = $range['end'] - $range['start'];
 
-    // Day span should be exactly 86399 seconds (23:59:59)
-    $valid_span = (($range['end'] - $range['start']) === 86399);
+    // Day span varies during DST transitions:
+    // - Normal day:     86399 seconds (24 hours - 1 second)
+    // - DST spring-fwd: 82799 seconds (23 hours - 1 second)
+    // - DST fall-back:  90000 seconds (25 hours - 1 second, but typically 89999)
+    // We accept any of these as valid.
+    $valid_spans = [
+        82799,  // 23h - 1s (DST spring forward)
+        86399,  // 24h - 1s (normal day)
+        89999,  // 25h - 1s (DST fall back)
+        90000,  // 25h (alternate calculation)
+    ];
+    $valid_span = in_array($span, $valid_spans, true);
 
     // Current time should fall within today's range
     $now = Time_Helper::now();
@@ -354,12 +391,16 @@ public static function test_day_range(): array {
         'details' => [
             'start'       => $range['start'],
             'end'         => $range['end'],
-            'span'        => $range['end'] - $range['start'],
+            'span'        => $span,
+            'span_hours'  => round($span / 3600, 2),
+            'is_dst_day'  => ($span !== 86399),
             'wp_timezone' => wp_timezone_string(),
         ],
     ];
 }
 ```
+
+> **Note:** During DST transitions, a local calendar day can be 23 or 25 hours. The test must account for this to avoid false failures on transition days.
 
 ### 5.3 Manual Test Scenarios
 
