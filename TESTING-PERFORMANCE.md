@@ -95,3 +95,250 @@ grep -rn "posts_per_page.*=>.*-1\|numberposts.*=>.*-1\|nopaging.*=>.*true" \
 3. A lightweight integration test that hits key endpoints and asserts `count($wpdb->queries) < N`
 
 The Perplexity answer points in the right direction but oversells the tooling maturity. For a plugin like your Hourly Monitor, manual code review with your SMSPD checklist is probably more effective than trying to automate this today.
+
+===
+
+Claude Opus 4.5 - 2nd round
+
+That's the right framing. Amortizing across Neochrome projects makes the investment worthwhile. Here's how I'd architect it:
+
+**Three-layer system:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 1: Shared GitHub Actions Workflow (reusable)            │
+│  .github/workflows/wp-performance-check.yml                     │
+│  Called from each plugin repo with plugin-specific config       │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 2: Composer Package (neochrome/wp-static-analysis)      │
+│  - PHPStan rules for unbounded queries                          │
+│  - PHPStan rules for N+1 patterns                               │
+│  - PHPCS sniffs for WP/WC antipatterns                          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 3: Runtime Test Harness (optional, per-plugin)          │
+│  - wp-env based integration tests                               │
+│  - SAVEQUERIES assertion helpers                                │
+│  - Query count thresholds per route                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Layer 1: Reusable workflow**
+
+Create a central repo (e.g., `neochrome/workflows`) with a callable workflow:
+
+```yaml
+# neochrome/workflows/.github/workflows/wp-performance.yml
+name: WP Performance Checks
+
+on:
+  workflow_call:
+    inputs:
+      php-version:
+        default: '8.2'
+        type: string
+      paths:
+        default: 'src/'
+        type: string
+      query-limit:
+        default: 50
+        type: number
+
+jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          tools: composer, cs2pr
+      
+      - name: Install dependencies
+        run: composer install --prefer-dist
+      
+      - name: PHPStan with WP rules
+        run: vendor/bin/phpstan analyse ${{ inputs.paths }} --error-format=checkstyle | cs2pr
+      
+      - name: Unbounded query grep check
+        run: |
+          ! grep -rn \
+            -e "posts_per_page.*=>.*-1" \
+            -e "numberposts.*=>.*-1" \
+            -e "nopaging.*=>.*true" \
+            -e "LIMIT.*-1" \
+            --include="*.php" ${{ inputs.paths }}
+```
+
+Each plugin repo just calls it:
+
+```yaml
+# your-plugin/.github/workflows/ci.yml
+jobs:
+  performance:
+    uses: neochrome/workflows/.github/workflows/wp-performance.yml@main
+    with:
+      paths: 'includes/'
+      query-limit: 30
+```
+
+**Layer 2: Composer package**
+
+This is the highest-ROI component. A private Composer package with:
+
+```
+neochrome/wp-static-analysis/
+├── composer.json
+├── phpstan/
+│   ├── rules/
+│   │   ├── UnboundedWpQueryRule.php
+│   │   ├── UnboundedWcGetOrdersRule.php
+│   │   ├── NoPagingRule.php
+│   │   └── LoopMetaQueryRule.php
+│   └── extension.neon
+└── phpcs/
+    └── Neochrome/
+        └── Sniffs/
+            └── Performance/
+                └── UnboundedQuerySniff.php
+```
+
+Example PHPStan rule:
+
+```php
+<?php
+// UnboundedWpQueryRule.php
+namespace Neochrome\StaticAnalysis\PHPStan\Rules;
+
+use PhpParser\Node;
+use PhpParser\Node\Expr\Array_;
+use PHPStan\Analyser\Scope;
+use PHPStan\Rules\Rule;
+use PHPStan\Rules\RuleErrorBuilder;
+
+/**
+ * @implements Rule<Array_>
+ */
+class UnboundedWpQueryRule implements Rule {
+    
+    public function getNodeType(): string {
+        return Array_::class;
+    }
+
+    public function processNode(Node $node, Scope $scope): array {
+        $errors = [];
+        $has_posts_per_page = false;
+        $is_unbounded = false;
+
+        foreach ($node->items as $item) {
+            if (!$item || !$item->key) {
+                continue;
+            }
+
+            $key = $this->getStringValue($item->key);
+            
+            if (in_array($key, ['posts_per_page', 'numberposts'], true)) {
+                $has_posts_per_page = true;
+                $value = $this->getNumericValue($item->value);
+                
+                if ($value === -1) {
+                    $is_unbounded = true;
+                    $errors[] = RuleErrorBuilder::message(
+                        sprintf("Unbounded query: '%s' => -1 can cause memory exhaustion.", $key)
+                    )->line($item->getLine())->build();
+                }
+            }
+
+            if ($key === 'nopaging') {
+                $value = $this->getBoolValue($item->value);
+                if ($value === true) {
+                    $errors[] = RuleErrorBuilder::message(
+                        "Unbounded query: 'nopaging' => true disables pagination limits."
+                    )->line($item->getLine())->build();
+                }
+            }
+        }
+
+        return $errors;
+    }
+
+    // ... helper methods
+}
+```
+
+**Layer 3: Runtime harness (drop-in trait)**
+
+```php
+<?php
+namespace Neochrome\TestHarness;
+
+trait QueryAssertions {
+    
+    protected function assertQueryCount(int $max, string $message = ''): void {
+        global $wpdb;
+        
+        $count = count($wpdb->queries ?? []);
+        $this->assertLessThanOrEqual(
+            $max,
+            $count,
+            $message ?: "Query count {$count} exceeds limit {$max}"
+        );
+    }
+
+    protected function assertNoNPlusOne(string $pattern = 'post_id = '): void {
+        global $wpdb;
+        
+        $repeated = [];
+        foreach ($wpdb->queries ?? [] as $query) {
+            $sql = $query[0];
+            if (stripos($sql, $pattern) !== false) {
+                // Normalize the query to detect repetition
+                $normalized = preg_replace('/\d+/', 'N', $sql);
+                $repeated[$normalized] = ($repeated[$normalized] ?? 0) + 1;
+            }
+        }
+
+        foreach ($repeated as $query => $count) {
+            $this->assertLessThanOrEqual(
+                2, // Allow some repetition, flag obvious N+1
+                $count,
+                "Potential N+1: query pattern repeated {$count} times:\n{$query}"
+            );
+        }
+    }
+
+    protected function withQueryTracking(callable $callback): array {
+        global $wpdb;
+        
+        $wpdb->queries = [];
+        define('SAVEQUERIES', true);
+        
+        $result = $callback();
+        
+        return [
+            'result' => $result,
+            'queries' => $wpdb->queries,
+            'count' => count($wpdb->queries),
+        ];
+    }
+}
+```
+
+**Suggested build order:**
+
+1. **Week 1:** Grep-based checks in a reusable workflow (immediate value, 2-3 hours)
+2. **Week 2-3:** Composer package with 3-4 PHPStan rules for your most common antipatterns
+3. **Later:** Runtime harness when you have plugins with integration test suites
+
+**ROI calculation:**
+
+If each plugin audit takes 2 hours of manual query review, and you have 10+ plugins, that's 20+ hours saved per audit cycle. The reusable workflow pays for itself after 2-3 plugins. The PHPStan rules catch issues before they reach review, which is even higher leverage.
+
+Want me to scaffold out the Composer package structure, or start with the reusable workflow?
