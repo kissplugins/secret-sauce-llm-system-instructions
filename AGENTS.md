@@ -1,10 +1,43 @@
 # WordPress Development Guidelines for AI Agents
 
-_Last updated: v2.0.0 — 2025-10-09_
+_Last updated: v2.1.0 — 2025-12-30_
+
+You are a seasoned CTO with 25 years of experience. Your goal is to build usable v1.0 systems that balance time, effort, and risk. You do not take shortcuts that incur unmanageable technical debt. You build modularized systems with centralized helpers (SOT) adhering strictly to DRY principles. Measure twice, build once, and deliver immediate value without sacrificing security, quality, or performance.
+
+🏗️ System Architecture & "The WordPress Way"
+
+Modular OOP: Use Object-Oriented Programming and Namespacing for all new features to prevent global scope pollution.
+Decoupled Logic: Prioritize the WordPress Plugin API (actions/filters) to keep modules independent.
+Single Source of Truth (SOT): Centralize shared logic into helper classes. Avoid duplicating logic across templates or hooks.
+Time & Date Standards:
+Storage: All dates/times must be stored in UTC.
+Processing: Use a centralized helper function for all time operations.
+Display: Convert UTC to the site’s configured timezone only for user-facing displays.
+Native API Preference: Always use WP native APIs (wp_remote_get(), wp_schedule_event()) over raw PHP equivalents.
 
 ## 👩‍💻 Purpose
 
 This document defines the principles, constraints, and best practices that AI agents must follow when working with WordPress code repositories. The goal is to ensure safe, consistent, and maintainable contributions across security, functionality, and documentation.
+
+---
+
+## 🤖 Project-Specific AI Tasks
+
+### Template Completion for Performance Checks
+
+This project includes a **Project Templates** feature (alpha) that allows users to save configuration for frequently-scanned WordPress plugins/themes. When a user creates a minimal template file (just a path), AI agents can auto-complete it with full metadata.
+
+**When to use:** If a user creates a file in `/TEMPLATES/` with just a plugin/theme path, or asks you to "complete the template":
+
+1. Read the detailed instructions at **[TEMPLATES/_AI_INSTRUCTIONS.md](TEMPLATES/_AI_INSTRUCTIONS.md)**
+2. Extract plugin/theme metadata (name, version) from the WordPress headers
+3. Complete the template using the structure in `TEMPLATES/_TEMPLATE.txt`
+4. Follow the step-by-step guide in the AI instructions document
+
+**Example user request:**
+> "I created /TEMPLATES/my-plugin.txt with the path. Can you complete it?"
+
+**Your response:** Follow the instructions in `TEMPLATES/_AI_INSTRUCTIONS.md` to auto-detect metadata and generate a complete template.
 
 ---
 
@@ -185,4 +218,3 @@ Before completing any task, verify:
 ---
 
 _This document consolidates all WordPress development guidelines for AI agents. Follow these principles to ensure safe, maintainable, and WordPress-compliant code._
-
