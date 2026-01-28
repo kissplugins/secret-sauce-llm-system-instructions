@@ -101,6 +101,114 @@ class OrderStateManager {
 }
 ```
 
+### Defensive Error Handling
+- [ ] **Check for WP_Error** - always validate return values from WordPress functions that may return `WP_Error`
+- [ ] **Use null coalescing** - prefer `??` operator for safe defaults instead of ternary or isset checks
+- [ ] **Validate types before operations** - especially with enums, objects, and serialized data
+- [ ] **Graceful degradation** - fail safely without breaking the site; provide fallback behavior
+- [ ] **Proper error logging** - use `error_log()` for debugging, never `var_dump()` or `print_r()` in production
+- [ ] **Never expose technical details to users** - show friendly messages, log technical details
+- [ ] **Check database errors** - validate `$wpdb->last_error` after queries
+- [ ] **Handle API failures** - wrap HTTP requests in try-catch, check for errors, provide fallbacks
+- [ ] **Use WordPress admin notices** - communicate errors to admins via `add_settings_error()` or admin notices
+- [ ] **Provide sensible defaults** - when data is missing or corrupt, use safe fallback values
+
+**Defensive Error Handling Example**:
+```php
+// ❌ BAD: No error checking
+$response = wp_remote_get( $api_url );
+$data = json_decode( wp_remote_retrieve_body( $response ) );
+$value = $data->items[0]->value; // Multiple failure points!
+
+// ✅ GOOD: Defensive error handling
+$response = wp_remote_get( $api_url );
+if ( is_wp_error( $response ) ) {
+    error_log( sprintf( 'API request failed: %s', $response->get_error_message() ) );
+    return $this->get_cached_fallback(); // Graceful degradation
+}
+
+$body = wp_remote_retrieve_body( $response );
+$data = json_decode( $body );
+
+if ( json_last_error() !== JSON_ERROR_NONE ) {
+    error_log( sprintf( 'JSON decode failed: %s', json_last_error_msg() ) );
+    return [];
+}
+
+$value = $data->items[0]->value ?? 'default_value'; // Null coalescing for safety
+```
+
+### Observability & Debugging
+- [ ] **Add strategic logging** - log state transitions, API calls, cache hits/misses, and error conditions
+- [ ] **Use consistent log prefixes** - prefix logs with plugin/feature name for easy filtering (e.g., `SBI:`, `PQS:`)
+- [ ] **Log context, not just values** - include relevant IDs, states, and operation names
+- [ ] **Add observability when stuck** - if debugging a bug, add temporary logging to trace execution flow
+- [ ] **Log before/after critical operations** - helps identify where failures occur
+- [ ] **Include type information** - log variable types when debugging type-related issues (e.g., `gettype()`, `instanceof`)
+- [ ] **Remove verbose logging after debugging** - clean up temporary debug logs before committing
+- [ ] **Use WordPress debug constants** - respect `WP_DEBUG` and `WP_DEBUG_LOG` settings
+
+**Observability Example**:
+```php
+// ✅ GOOD: Strategic logging for debugging
+error_log( sprintf(
+    'SBI: Processing cache check for %s (key: %s) - found: %s',
+    $full_name,
+    $cache_key,
+    $cached ? 'YES' : 'NO'
+) );
+
+// ✅ GOOD: Type validation logging
+if ( ! ( $state instanceof PluginState ) ) {
+    error_log( sprintf(
+        'SBI: Invalid state type for %s: %s (expected PluginState enum)',
+        $repo_name,
+        gettype( $state )
+    ) );
+}
+```
+
+---
+
+## 🏗️ Building from the Ground Up
+
+When creating new features or plugins from scratch, follow this checklist:
+
+- [ ] **Start with DRY helpers** - create reusable utility functions before writing feature code
+- [ ] **Design single contract writers** - identify state ownership and create dedicated manager classes
+- [ ] **Separate concerns** - split logic into distinct layers (data access, business logic, presentation)
+- [ ] **Add observability from the start** - include logging for key operations and state changes
+- [ ] **Implement defensive error handling** - validate inputs, check for errors, provide fallbacks
+- [ ] **Use WordPress APIs** - leverage built-in functions instead of reinventing (caching, HTTP, database)
+- [ ] **Plan for extensibility** - add hooks and filters for future customization
+- [ ] **Document as you build** - write PHPDoc comments and inline documentation immediately
+- [ ] **Consider FSM early** - if feature has 3+ states, design state machine from the start
+- [ ] **Write tests alongside code** - create unit tests for critical business logic
+
+**Ground-Up Example Structure**:
+```php
+// 1. DRY Helpers (utilities.php)
+function prefix_sanitize_repo_name( $name ) { /* ... */ }
+function prefix_format_error_message( $error ) { /* ... */ }
+
+// 2. Single Contract Writer (StateManager.php)
+class StateManager {
+    public function set_state( $id, $state ) { /* SSoT writer */ }
+    public function get_state( $id ) { /* SSoT reader */ }
+}
+
+// 3. Separation of Concerns
+// - DataAccess.php (database/API calls)
+// - BusinessLogic.php (rules, validation)
+// - Presentation.php (rendering, formatting)
+
+// 4. Observability
+error_log( 'PREFIX: Feature initialized' );
+
+// 5. Defensive Error Handling
+if ( is_wp_error( $result ) ) { /* handle */ }
+```
+
 ---
 
 ## 🔧 Scope & Change Control
@@ -118,7 +226,7 @@ class OrderStateManager {
 
 ## 📝 Documentation & Versioning
 
-- [ ] **Use PHPDoc standards** for all functions and classes
+- [ ] **Use PHPDoc and JSDoc standards** for all functions and classes
 - [ ] **Add inline documentation** for complex logic
 - [ ] **Increment version numbers** in plugin/theme headers when making changes
 - [ ] **Update CHANGELOG.md** with version number, date, and medium-level details of changes
