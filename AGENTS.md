@@ -28,6 +28,68 @@ Defines principles, constraints, and best practices for AI agents working with W
 
 ---
 
+## ⏱️ Timeouts & Resource Limits
+
+- **Always set timeouts for HTTP requests** — use `timeout` parameter in `wp_remote_get()`, `wp_remote_post()` (default: 5s)
+- **Set appropriate timeout values** — 5-10s for API calls, 15-30s for large file downloads
+- **Handle timeout errors** — check for timeout-specific errors in `WP_Error` responses
+- **Limit execution time for long operations** — use `set_time_limit()` for batch processing (if safe)
+- **Implement request abortion** — use `AbortController` in JavaScript for cancellable fetch requests
+- **Add max retries with backoff** — retry failed requests 2-3 times with exponential backoff
+- **Set reasonable AJAX timeouts** — configure `timeout` in jQuery.ajax() or fetch() (default: 30s for admin)
+
+```php
+// ✅ HTTP request with timeout
+$response = wp_remote_get( $api_url, [
+    'timeout' => 10, // 10 seconds
+    'headers' => [ 'User-Agent' => 'MyPlugin/1.0' ],
+] );
+
+if ( is_wp_error( $response ) ) {
+    $error_message = $response->get_error_message();
+
+    // Check for timeout specifically
+    if ( strpos( $error_message, 'timed out' ) !== false ) {
+        error_log( 'API request timed out after 10s' );
+        return $this->get_cached_fallback();
+    }
+
+    error_log( sprintf( 'API error: %s', $error_message ) );
+    return false;
+}
+```
+
+```javascript
+// ✅ JavaScript fetch with timeout and abort
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+try {
+    const response = await fetch(ajaxurl, {
+        method: 'POST',
+        signal: controller.signal,
+        body: formData
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+
+} catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error.name === 'AbortError') {
+        console.error('Request timed out after 10s');
+        return { success: false, error: 'timeout' };
+    }
+
+    console.error('Request failed:', error);
+    return { success: false, error: error.message };
+}
+```
+
+---
+
 ## 🏗️ The WordPress Way
 
 ### Core Requirements
