@@ -32,30 +32,47 @@ Defines principles, constraints, and best practices for AI agents working with W
 
 - **Always set timeouts for HTTP requests** — use `timeout` parameter in `wp_remote_get()`, `wp_remote_post()` (default: 5s)
 - **Set appropriate timeout values** — 5-10s for API calls, 15-30s for large file downloads
-- **Handle timeout errors** — check for timeout-specific errors in `WP_Error` responses
-- **Limit execution time for long operations** — use `set_time_limit()` for batch processing (if safe)
-- **Implement request abortion** — use `AbortController` in JavaScript for cancellable fetch requests
+- **Handle timeout errors** — check for timeout-specific errors in `WP_Error` responses (note: detection is best-effort as error messages vary by HTTP transport)
 - **Add max retries with backoff** — retry failed requests 2-3 times with exponential backoff
 - **Set reasonable AJAX timeouts** — configure `timeout` in jQuery.ajax() or fetch() (default: 30s for admin)
+- **Use WP-Cron for long operations** — chunk batch processing via scheduled events rather than extending execution time
 
 ```php
-// ✅ HTTP request with timeout
-$response = wp_remote_get( $api_url, [
-    'timeout' => 10, // 10 seconds
-    'headers' => [ 'User-Agent' => 'MyPlugin/1.0' ],
-] );
+// ✅ HTTP request with timeout and retry
+function prefix_fetch_with_retry( $url, $max_retries = 3 ) {
+    $attempt = 0;
+    
+    while ( $attempt < $max_retries ) {
+        $response = wp_remote_get( $url, [
+            'timeout' => 10,
+            'headers' => [ 'User-Agent' => 'MyPlugin/1.0' ],
+        ] );
 
-if ( is_wp_error( $response ) ) {
-    $error_message = $response->get_error_message();
+        if ( ! is_wp_error( $response ) ) {
+            return $response;
+        }
 
-    // Check for timeout specifically
-    if ( strpos( $error_message, 'timed out' ) !== false ) {
-        error_log( 'API request timed out after 10s' );
-        return $this->get_cached_fallback();
+        $error_message = $response->get_error_message();
+        
+        // Best-effort timeout detection (message varies by transport)
+        $is_timeout = strpos( $error_message, 'timed out' ) !== false 
+                   || strpos( $error_message, 'timeout' ) !== false;
+
+        if ( ! $is_timeout ) {
+            // Non-timeout error, don't retry
+            error_log( sprintf( 'API error (no retry): %s', $error_message ) );
+            return $response;
+        }
+
+        $attempt++;
+        if ( $attempt < $max_retries ) {
+            // Exponential backoff: 1s, 2s, 4s...
+            sleep( pow( 2, $attempt - 1 ) );
+        }
     }
 
-    error_log( sprintf( 'API error: %s', $error_message ) );
-    return false;
+    error_log( sprintf( 'API request failed after %d attempts', $max_retries ) );
+    return $response; // Return last error
 }
 ```
 
@@ -167,7 +184,7 @@ $value = $data->items[0]->value ?? 'default_value';
 
 ## 🏗️ Building from the Ground Up
 
-When creating new features (eithe at start of project or in the middle  of a project):
+When creating new features (either at start of project or in the middle of a project):
 1. **Start with DRY helpers** — reusable utilities before feature code
 2. **Design single contract writers** — identify state ownership upfront
 3. **Separate concerns** — data access, business logic, presentation layers
