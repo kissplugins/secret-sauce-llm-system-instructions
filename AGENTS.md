@@ -1,6 +1,6 @@
 # WordPress Development Guidelines for AI Agents
 
-_Last updated: v2.0.1 — 2026-01-28
+_Last updated: v2.1.0 — 2026-01-28_
 
 ## 👩‍💻 Purpose
 
@@ -58,6 +58,48 @@ This document defines the principles, constraints, and best practices that AI ag
 - [ ] **Escape user input before RegExp construction** - sanitize metacharacters to prevent SyntaxError and ReDoS attacks
 - [ ] **Implement Page Visibility API** for polling/intervals - pause expensive operations when tab is hidden
 - [ ] **Use server-side transient caching** for expensive operations (filesystem scans, API calls) instead of repeated execution
+
+### State Hygiene & Single Contract Writers
+- [ ] **Establish Single Source of Truth (SSoT)** - designate ONE authoritative source for each piece of state (e.g., FSM, database, options table)
+- [ ] **Use single contract writers** - only ONE class/function should write to each state; all others must read through it
+- [ ] **Avoid parallel state tracking** - never duplicate state in multiple places (cache, database, class properties, etc.)
+- [ ] **Derive computed values** - calculate dependent values from SSoT instead of storing them separately
+- [ ] **Handle serialization boundaries** - when state crosses boundaries (JSON, transients, AJAX), convert back to proper types (enums, objects)
+- [ ] **Validate state consistency** - add guards to detect when state becomes inconsistent across sources
+- [ ] **Document state ownership** - clearly comment which class/function owns each piece of state
+- [ ] **Centralize state transitions** - use dedicated methods/classes for state changes, not direct property assignment
+
+**State Hygiene Example**:
+```php
+// ❌ BAD: Parallel state tracking
+$is_active = get_post_meta( $post_id, 'is_active', true );
+$status = get_post_meta( $post_id, 'status', true ); // Duplicates is_active
+update_option( 'cached_status_' . $post_id, $status ); // Third copy!
+
+// ✅ GOOD: Single Source of Truth with derived values
+class OrderStateManager {
+    // SSoT: Only this class writes to order_state
+    public function set_state( $order_id, OrderState $state ): void {
+        update_post_meta( $order_id, 'order_state', $state->value );
+        do_action( 'order_state_changed', $order_id, $state );
+    }
+
+    // All reads go through SSoT
+    public function get_state( $order_id ): OrderState {
+        $value = get_post_meta( $order_id, 'order_state', true );
+        return OrderState::from( $value ?: 'pending' );
+    }
+
+    // Derived values computed from SSoT
+    public function is_active( $order_id ): bool {
+        return in_array(
+            $this->get_state( $order_id ),
+            [ OrderState::PROCESSING, OrderState::SHIPPED ],
+            true
+        );
+    }
+}
+```
 
 ---
 
