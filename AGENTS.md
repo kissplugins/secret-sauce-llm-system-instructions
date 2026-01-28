@@ -105,7 +105,7 @@ $value = $data->items[0]->value ?? 'default_value';
 
 ## 🏗️ Building from the Ground Up
 
-When creating new features:
+When creating new features (eithe at start of project or in the middle  of a project):
 1. **Start with DRY helpers** — reusable utilities before feature code
 2. **Design single contract writers** — identify state ownership upfront
 3. **Separate concerns** — data access, business logic, presentation layers
