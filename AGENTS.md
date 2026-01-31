@@ -1,6 +1,6 @@
 # WordPress Development Guidelines for AI Agents
 
-_Last updated: v2.1.0 — 2026-01-28_
+_Last updated: v2.2.0 — 2026-01-30_
 
 ## Purpose
 
@@ -196,6 +196,56 @@ When creating new features (either at start of project or in the middle of a pro
 
 ---
 
+## 🔁 Simplification-First Debugging
+
+### The Problem
+LLMs have a bias toward fixing existing code rather than questioning its complexity. This leads to "fix stacking" — repeatedly patching symptoms without addressing root design issues.
+
+### Required Process
+**After 2 failed fix attempts on the same issue, STOP and evaluate:**
+
+1. Would this bug exist in a simpler implementation?
+2. How many interacting rules/components must be understood to fix this?
+3. Is the fix obvious within 2 minutes of reading the code?
+
+If any answer suggests over-engineering, **propose simplification before attempting another fix**.
+
+### Red Flags That Demand Simplification
+- Fix requires understanding 3+ interacting components
+- You're debugging interactions rather than logic
+- The "fix" introduces new edge cases
+- You find yourself saying "this should work"
+- CSS: layout uses nested positioning contexts, multiple competing flexbox/grid rules, or magic numbers
+
+### Technology-Specific Guidance
+
+**CSS/Layout:**
+> If the layout fix isn't obvious within 2 minutes, the layout is over-engineered. Propose fewer positioning contexts, less nesting, simpler flow.
+
+**JavaScript:**
+> If debugging event timing, race conditions, or "why isn't this updating" — propose reducing async complexity or state sources.
+
+**PHP/WordPress:**
+> If fix requires tracing data through 4+ functions, propose flattening the call chain or consolidating logic.
+
+### How to Propose Simplification
+Don't just simplify silently. State:
+1. What complexity you've identified
+2. What simpler approach you recommend
+3. What tradeoffs exist (if any)
+
+```
+"I've attempted 2 fixes for this layout issue. The current CSS uses nested 
+flexbox with absolute positioning overrides — these are fighting each other.
+
+I recommend simplifying to a single flexbox container with gap, removing 
+the absolute positioning entirely. This eliminates the interaction bugs.
+
+Tradeoff: may need minor markup adjustment."
+```
+
+---
+
 ## 🔧 Scope & Change Control
 
 - **Stay within task scope** — only perform explicitly requested tasks
@@ -273,6 +323,7 @@ When creating new features (either at start of project or in the middle of a pro
 | **Hooks** | `add_action()`, `add_filter()`, `do_action()`, `apply_filters()` |
 | **AJAX** | `wp_ajax_{action}`, `wp_send_json_success()`, `wp_send_json_error()` |
 | **Scheduling** | `wp_schedule_event()`, `wp_schedule_single_event()`, `wp_clear_scheduled_hook()` |
+| **Debugging** | After 2 failed fixes → evaluate complexity → propose simplification |
 
 ---
 
