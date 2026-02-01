@@ -1,4 +1,3 @@
-```markdown
 # Automated Self-Verification Pattern: Agent Instructions
 
 ## Your Objective
@@ -538,4 +537,3 @@ neochrome-toolkit analyze-json test-layout.json
 7. **Toolkit integration** (custom to your Neochrome ecosystem)
 
 **Remember:** Don't implement all of these at once. Pick one enhancement per project/workflow and iterate based on what actually saves you time.
-```
