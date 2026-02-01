@@ -76,6 +76,134 @@ psql -c "\d users" | grep "id.*integer.*primary key" && echo "✅ Pass"
 # 4. If fail → analyze schema, adjust SQL, rollback, repeat
 ```
 
+### Debugging JSON-Embedded CSS Pattern
+
+**Context**: Page builders (Beaver Builder, Elementor) and design systems often embed CSS as JSON properties or inline styles within data structures. This makes visual debugging difficult since you can't directly inspect the CSS in a browser's DevTools.
+
+**Your debugging workflow:**
+
+```bash
+# 1. Extract CSS from JSON and create standalone test file
+node extract-css-from-json.js layout.json > test-render.html
+
+# Example extraction script (extract-css-from-json.js):
+# - Parse JSON structure
+# - Find all style properties (color, padding, font_size, etc.)
+# - Find inline styles in rich-text fields
+# - Generate complete HTML with embedded styles
+# - Add visual grid/guides for spacing verification
+
+# 2. Open in browser for visual inspection
+open test-render.html  # macOS
+# OR
+start test-render.html # Windows
+
+# 3. Automated CSS validation checks
+echo "Running CSS validation..."
+
+# Check for invalid color values
+grep -E 'color.*[^#0-9a-fA-F]' test-render.html && echo "❌ Invalid colors found"
+
+# Check for missing units
+grep -E 'font-size: [0-9]+[^px|em|rem]' test-render.html && echo "❌ Missing units"
+
+# Check for unreasonably large values
+node validate-css-values.js layout.json
+# Validates: padding >200px, font-size >100px, negative margins, etc.
+
+# 4. Compare rendered output to expected
+# Take screenshot and compare dimensions
+node screenshot-and-measure.js test-render.html
+# Returns: element heights, widths, color values, spacing
+
+# 5. If visual bugs found, iterate:
+# - Adjust JSON color/padding/spacing values
+# - Regenerate test-render.html
+# - Re-check in browser
+# - Repeat until matches design
+```
+
+**Realistic debugging checks you can automate:**
+
+```javascript
+// validate-css-values.js example
+const layout = require('./layout.json');
+
+const checks = {
+  invalidColors: [],
+  missingSizeUnits: [],
+  suspiciousValues: [],
+  accessibilityIssues: []
+};
+
+// Check color contrast
+layout.modules.forEach(module => {
+  if (module.settings.bg_color && module.settings.text_color) {
+    const contrast = calculateContrast(
+      module.settings.bg_color,
+      module.settings.text_color
+    );
+    if (contrast < 4.5) {
+      checks.accessibilityIssues.push(
+        `Low contrast: ${module.settings.text_color} on ${module.settings.bg_color}`
+      );
+    }
+  }
+  
+  // Check for suspiciously large spacing
+  if (parseInt(module.settings.padding_top) > 200) {
+    checks.suspiciousValues.push(
+      `Large padding_top: ${module.settings.padding_top}px in ${module.node}`
+    );
+  }
+  
+  // Check for font sizes without units (should be rare)
+  if (module.settings.font_size && !/px|em|rem/.test(module.settings.font_size)) {
+    checks.missingSizeUnits.push(
+      `Font size missing unit: ${module.settings.font_size} in ${module.node}`
+    );
+  }
+});
+
+console.log(JSON.stringify(checks, null, 2));
+```
+
+**When to use this approach:**
+- ✅ JSON contains inline styles or CSS properties
+- ✅ You need to verify spacing, colors, typography before import
+- ✅ Design system requires specific color values/spacing scales
+- ✅ You're generating layouts programmatically and need visual QA
+
+**When NOT to use this approach:**
+- ❌ CSS is already in separate .css files (use normal browser DevTools)
+- ❌ You need to test interactive states (hover, click, animations)
+- ❌ Layout depends on dynamic content from database
+
+**Iteration example:**
+
+```
+ITERATION 1:
+- Generated: Beaver Builder JSON with red H1
+- Extracted: test-render.html with <h1 style="color: ff0000">
+- Validation: ❌ Missing # in color value
+- Fix: Change "color": "ff0000" → "color": "#ff0000"
+
+ITERATION 2:
+- Updated JSON with corrected color
+- Re-extracted: test-render.html
+- Validation: ✅ Color valid
+- Visual check: ✅ H1 renders red as expected
+- Status: COMPLETE
+```
+
+**Realistic expectations:**
+- ✅ Can validate: color formats, size units, numeric ranges, contrast ratios
+- ✅ Can extract and render: static layouts for visual inspection
+- ✅ Can measure: element dimensions, spacing values from screenshots
+- ⚠️ Limited: Can't test responsive breakpoints without additional tools
+- ⚠️ Limited: Can't verify complex CSS interactions (z-index stacking, flexbox edge cases)
+- ❌ Cannot: Test JavaScript-driven styles or animations from JSON alone
+
 ## Your Iteration Template
 
 For each test cycle, follow this structure:
