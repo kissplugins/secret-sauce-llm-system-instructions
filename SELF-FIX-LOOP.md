@@ -253,4 +253,289 @@ You've completed the task when:
 - **Simplify when stuck**: Complex solutions often indicate wrong approach
 
 Now begin your automated verification workflow.
+
+---
+
+## Bonus: Road Map
+
+**Future enhancements to make this pattern even more powerful:**
+
+### 1. Meta-Reflection Step
+After each iteration, add a structured self-assessment:
+
+```
+META-REFLECTION (Iteration N):
+Confidence Score: [1-10] (10 = certain this will work, 1 = guessing)
+Assumptions Checked:
+  ✓ JSON schema matches Beaver Builder v2.8 format
+  ✓ MySQL socket path is correct for Local site
+  ✓ Page ID exists and is published
+  ✗ Cache cleared automatically (NOT VERIFIED - need to add)
+Uncertainty Areas:
+  - Not sure if inline styles override module settings
+  - Unknown if font_size requires "px" suffix or not
+Risk Assessment: [LOW/MEDIUM/HIGH]
+Should Continue? [YES/NO/ASK_HUMAN]
+```
+
+**Benefits:**
+- Forces explicit acknowledgment of what you're assuming
+- Surfaces blind spots before they cause wasted iterations
+- Confidence trends (going down = wrong direction, going up = making progress)
+- Makes "stop and ask" decision more data-driven
+
+### 2. Automated Visual Regression Testing
+Integrate screenshot diffing for CSS pattern:
+
+```bash
+npm install pixelmatch puppeteer
+
+# visual-regression-test.js
+const puppeteer = require('puppeteer');
+const pixelmatch = require('pixelmatch');
+const PNG = require('pngjs').PNG;
+const fs = require('fs');
+
+async function compareScreenshots(url, baselinePath) {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1920, height: 1080 });
+  await page.goto(url);
+  
+  const screenshot = await page.screenshot();
+  await browser.close();
+  
+  // Load baseline and current
+  const baseline = PNG.sync.read(fs.readFileSync(baselinePath));
+  const current = PNG.sync.read(screenshot);
+  const diff = new PNG({ width: baseline.width, height: baseline.height });
+  
+  // Compare
+  const numDiffPixels = pixelmatch(
+    baseline.data, 
+    current.data, 
+    diff.data,
+    baseline.width,
+    baseline.height,
+    { threshold: 0.1 }
+  );
+  
+  const diffPercent = (numDiffPixels / (baseline.width * baseline.height)) * 100;
+  
+  return {
+    passed: diffPercent < 0.5, // Less than 0.5% difference
+    diffPercent,
+    diffImagePath: '/tmp/visual-diff.png'
+  };
+}
+
+// Usage in your workflow:
+# node visual-regression-test.js https://mysite.local/test-page baseline.png
+```
+
+**Iteration enhancement:**
+```
+ITERATION N:
+...
+6. Verification output: [show curl/CLI output]
+7. Visual regression: 0.3% diff from baseline (✅ PASS)
+8. Status: ✅ PASS
+```
+
+### 3. YAML Summaries for Git Commits
+Enhance your iteration template to generate commit-ready summaries:
+
+```yaml
+# iteration-summary.yml (auto-generated after each iteration)
+iteration: 3
+timestamp: 2026-01-31T15:43:57Z
+test_type: beaver_builder_json_import
+status: pass
+changes:
+  - file: test-layout.json
+    modification: Fixed color value format (#ff0000)
+  - file: test-bb-import.php
+    modification: Added cache clearing after import
+verification:
+  method: curl_grep
+  confidence: 9
+  assumptions_checked:
+    - JSON schema valid
+    - MySQL socket correct
+    - Cache cleared
+  assumptions_unchecked: []
+metrics:
+  iterations_required: 3
+  time_elapsed_seconds: 45
+  files_modified: 2
+next_steps:
+  - Add visual regression baseline
+  - Extract verification into reusable function
+```
+
+**GitHub workflow integration:**
+```bash
+# .github/workflows/auto-test-commit.yml
+name: Agent Auto-Test Commit
+
+on:
+  push:
+    paths:
+      - 'iteration-summary.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Parse iteration summary
+        run: |
+          STATUS=$(yq eval '.status' iteration-summary.yml)
+          if [ "$STATUS" != "pass" ]; then
+            echo "❌ Iteration did not pass"
+            exit 1
+          fi
+      - name: Auto-generate commit message
+        run: |
+          ITERATION=$(yq eval '.iteration' iteration-summary.yml)
+          CHANGES=$(yq eval '.changes[].modification' iteration-summary.yml | sed 's/^/- /')
+          echo "Test iteration $ITERATION: PASS" > commit-msg.txt
+          echo "" >> commit-msg.txt
+          echo "$CHANGES" >> commit-msg.txt
+      - name: Commit and push
+        run: |
+          git config user.name "Agent Bot"
+          git commit -F commit-msg.txt
+          git push
+```
+
+### 4. Performance Regression Detection
+Extend verification to catch performance issues:
+
+```bash
+# Add to verification step:
+echo "Checking page load performance..."
+curl -w "@curl-format.txt" -o /dev/null -s "$PAGE_URL"
+
+# curl-format.txt:
+time_namelookup:  %{time_namelookup}\n
+time_connect:     %{time_connect}\n
+time_starttransfer: %{time_starttransfer}\n
+time_total:       %{time_total}\n
+size_download:    %{size_download}\n
+
+# Alert if metrics regress:
+if [ "$TIME_TOTAL" -gt "2.0" ]; then
+  echo "⚠️  Page load time degraded: ${TIME_TOTAL}s (baseline: 1.2s)"
+fi
+```
+
+### 5. Finite State Machine for Complex Workflows
+For multi-step processes (like your production reliability work):
+
+```javascript
+// test-state-machine.js
+const states = {
+  IDLE: 'idle',
+  GENERATING: 'generating',
+  SUBMITTING: 'submitting',
+  VERIFYING: 'verifying',
+  FAILED: 'failed',
+  SUCCESS: 'success'
+};
+
+class TestWorkflow {
+  constructor() {
+    this.state = states.IDLE;
+    this.iteration = 0;
+    this.maxIterations = 5;
+  }
+  
+  async run() {
+    while (this.state !== states.SUCCESS && this.iteration < this.maxIterations) {
+      this.iteration++;
+      await this.transition();
+    }
+    
+    if (this.state !== states.SUCCESS) {
+      console.log('❌ Max iterations reached, asking human for help');
+    }
+  }
+  
+  async transition() {
+    switch(this.state) {
+      case states.IDLE:
+        this.state = states.GENERATING;
+        await this.generateTestData();
+        break;
+      case states.GENERATING:
+        this.state = states.SUBMITTING;
+        await this.submitToSystem();
+        break;
+      case states.SUBMITTING:
+        this.state = states.VERIFYING;
+        await this.verifyResults();
+        break;
+      case states.VERIFYING:
+        if (await this.isValid()) {
+          this.state = states.SUCCESS;
+        } else {
+          this.state = states.FAILED;
+          await this.analyzeFailure();
+          this.state = states.GENERATING; // Retry with adjustments
+        }
+        break;
+    }
+  }
+}
+```
+
+### 6. Test Data Mutation Strategies
+Systematically explore edge cases:
+
+```javascript
+// Instead of guessing what's wrong, mutate test data methodically:
+const mutations = [
+  { name: 'remove_hash_from_color', fn: (json) => json.color = json.color.replace('#', '') },
+  { name: 'add_px_suffix', fn: (json) => json.font_size = json.font_size + 'px' },
+  { name: 'double_padding', fn: (json) => json.padding = parseInt(json.padding) * 2 },
+  { name: 'swap_row_order', fn: (json) => json.rows.reverse() }
+];
+
+// Run each mutation and track which ones pass
+for (const mutation of mutations) {
+  const testData = applyMutation(baseData, mutation);
+  const result = await runTest(testData);
+  console.log(`${mutation.name}: ${result.passed ? '✅' : '❌'}`);
+}
+```
+
+### 7. Integration with Neochrome WP Toolkit
+Link this pattern to your static analysis tools:
+
+```bash
+# Before submitting JSON, run through your toolkit:
+neochrome-toolkit analyze-json test-layout.json
+
+# Check for common patterns:
+# - Unbounded queries in custom SQL
+# - N+1 patterns in module data fetching
+# - Missing cache headers
+# - Security issues (XSS in inline styles)
+
+# Only proceed if static analysis passes
+```
+
+---
+
+**Implementation Priority:**
+1. **Meta-reflection** (easy win, immediate value)
+2. **YAML summaries** (supports your GitHub workflow focus)
+3. **Visual regression** (medium effort, high value for CSS debugging)
+4. **Performance regression** (aligns with your performance monitoring work)
+5. **FSM pattern** (complex, but valuable for production reliability)
+6. **Mutation testing** (advanced, use when simpler approaches fail)
+7. **Toolkit integration** (custom to your Neochrome ecosystem)
+
+**Remember:** Don't implement all of these at once. Pick one enhancement per project/workflow and iterate based on what actually saves you time.
 ```
